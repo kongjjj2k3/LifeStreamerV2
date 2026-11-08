@@ -40,6 +40,7 @@
 
     <queries>
         <package android:name="com.dimadesu.mediasrvr" />
+        <package android:name="com.kongjjj.overlay" />
     </queries>
 
     <application

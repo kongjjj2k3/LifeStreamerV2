@@ -14,12 +14,10 @@ import io.github.thibaultbee.streampack.core.elements.processing.video.DefaultSu
 import io.github.thibaultbee.streampack.core.elements.processing.video.outputs.SurfaceOutput
 import io.github.thibaultbee.streampack.core.elements.sources.video.AbstractPreviewableSource
 import io.github.thibaultbee.streampack.core.elements.utils.time.Timebase
-import io.github.thibaultbee.streampack.core.elements.sources.video.IVideoSource
 import io.github.thibaultbee.streampack.core.elements.sources.video.IVideoSourceInternal
 import io.github.thibaultbee.streampack.core.elements.sources.video.VideoSourceConfig
 import io.github.thibaultbee.streampack.core.elements.utils.av.video.DynamicRangeProfile
 import io.github.thibaultbee.streampack.core.pipelines.outputs.SurfaceDescriptor
-import io.github.thibaultbee.streampack.core.utils.InternalStreamPackApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import android.graphics.Rect
@@ -31,7 +29,6 @@ import java.util.concurrent.atomic.AtomicInteger
  * Provides continuous video frames from a USB camera via UVCAndroid library.
  * Supports dual output (streaming + preview) using surface processor.
  */
-@OptIn(InternalStreamPackApi::class)
 class UvcVideoSource(
     private val context: Context,
     private val cameraHelper: CameraHelper,
@@ -425,7 +422,7 @@ class UvcVideoSource(
 
                 // Create surface processor
                 val processorFactory = DefaultSurfaceProcessorFactory()
-                surfaceProcessor = processorFactory.create(context, DynamicRangeProfile.sdr, dispatcherProvider)
+                surfaceProcessor = processorFactory.create(DynamicRangeProfile.sdr, dispatcherProvider)
 
                 // Create input surface for camera
                 val width = cachedWidth.get()
@@ -547,10 +544,9 @@ class UvcVideoSource(
     /**
      * Factory for creating UVC video source instances
      */
-    @OptIn(InternalStreamPackApi::class)
     class Factory(
         private val cameraHelper: CameraHelper
-    ) : IVideoSource.Factory {
+    ) : IVideoSourceInternal.Factory {
         override suspend fun create(
             context: Context,
             dispatcherProvider: io.github.thibaultbee.streampack.core.pipelines.IVideoDispatcherProvider

@@ -19,7 +19,8 @@ fun CameraControlButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     isActive: Boolean = false,
-    activeContainerColor: Color = Color(0xFF4CAF50)
+    activeContainerColor: Color = Color(0xFF4CAF50),
+    tint: Color = Color.White
 ) {
     Button(
         onClick = onClick,
@@ -35,7 +36,7 @@ fun CameraControlButton(
         Icon(
             painter = painterResource(id = iconRes),
             contentDescription = contentDescription,
-            tint = Color.White
+            tint = tint
         )
     }
 }

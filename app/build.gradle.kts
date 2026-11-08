@@ -5,8 +5,9 @@ import java.util.Properties
 
 plugins {
     alias(libs.plugins.android.application)
+    alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
-    alias(libs.plugins.legacy.kapt)
+    id("kotlin-kapt")
 }
 
 android {
@@ -17,10 +18,10 @@ android {
 
         minSdk = 24
         targetSdk = 36
-        compileSdk = 37
+        compileSdk = 36
 
         versionCode = 45
-        versionName = "2.10.0"
+        versionName = "2.8.5"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -56,9 +57,19 @@ android {
         }
     }
     
+    applicationVariants.all {
+        outputs.all {
+            (this as com.android.build.gradle.internal.api.BaseVariantOutputImpl).outputFileName =
+                "LifeStreamer-v${versionName}-${name}.apk"
+        }
+    }
+    
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+    }
+    kotlinOptions {
+        jvmTarget = "17"
     }
     buildFeatures {
         viewBinding = true
@@ -82,7 +93,6 @@ dependencies {
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
-    implementation(libs.androidx.compose.material.icons.core)
     implementation(libs.androidx.compose.runtime.livedata)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)
@@ -134,7 +144,7 @@ afterEvaluate {
                 injectedDir?.let { file("$it/release/app-release.apk") },
                 injectedDir?.let { file("$it/app-release.apk") },
                 file("${projectDir}/release/app-release.apk"),
-                file("${layout.buildDirectory.get()}/outputs/apk/release/app-release.apk"),
+                file("${layout.buildDirectory.get()}/outputs/apk/release/app-release.apk")
             ).distinct().forEach { originalApk ->
                 if (originalApk.exists()) {
                     val newFile = File(originalApk.parent, newName)
@@ -151,7 +161,7 @@ afterEvaluate {
                 injectedDir?.let { file("$it/release/app-release.aab") },
                 injectedDir?.let { file("$it/app-release.aab") },
                 file("${projectDir}/release/app-release.aab"),
-                file("${layout.buildDirectory.get()}/outputs/bundle/release/app-release.aab"),
+                file("${layout.buildDirectory.get()}/outputs/bundle/release/app-release.aab")
             ).distinct().forEach { originalBundle ->
                 if (originalBundle.exists()) {
                     val newFile = File(originalBundle.parent, newName)

@@ -21,7 +21,7 @@ import com.dimadesu.lifestreamer.R
 import io.github.thibaultbee.streampack.core.streamers.single.ISingleStreamer
 import io.github.thibaultbee.streampack.core.streamers.single.IVideoSingleStreamer
 import io.github.thibaultbee.streampack.core.streamers.single.SingleStreamer
-import io.github.thibaultbee.streampack.core.pipelines.AudioInputMode
+import io.github.thibaultbee.streampack.core.pipelines.StreamerPipeline
 import io.github.thibaultbee.streampack.services.StreamerService
 import io.github.thibaultbee.streampack.services.utils.StreamerFactory
 import android.content.pm.ServiceInfo
@@ -64,7 +64,7 @@ class CameraStreamerService : StreamerService<ISingleStreamer>(
         override fun create(context: Context): ISingleStreamer {
             return SingleStreamer(
                 context,
-                audioInputMode = AudioInputMode.PUSH
+                audioInputMode = StreamerPipeline.AudioInputMode.PUSH
             )
         }
     },
@@ -855,7 +855,7 @@ class CameraStreamerService : StreamerService<ISingleStreamer>(
             val reconnecting = _isReconnecting.value
             val streamingNow = streamer.isStreamingFlow.value
             
-            // If reconnecting, always show CONNECTING status until completeReconnection() clears it
+            // If reconnecting, always show CONNECTING status
             if (reconnecting) {
                 return StreamStatus.CONNECTING
             }
@@ -1686,7 +1686,7 @@ class CameraStreamerService : StreamerService<ISingleStreamer>(
         streamingStartTime = System.currentTimeMillis()
         _isReconnecting.value = false
         _reconnectionStatusMessage.value = "Reconnected successfully!"
-        
+
         // Clear success message after 3 seconds
         serviceScope.launch {
             delay(3000)

@@ -16,8 +16,15 @@
 package com.dimadesu.lifestreamer.ui.main
 
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
+import android.util.Log
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import com.dimadesu.lifestreamer.R
 import com.dimadesu.lifestreamer.rtmp.audio.MediaProjectionService
 import com.dimadesu.lifestreamer.services.CameraStreamerService
@@ -25,6 +32,9 @@ import com.dimadesu.lifestreamer.services.CameraStreamerService
 class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Hide notification bar (status bar) and navigation bar for full-screen display
+        hideSystemUI()
 
         // Notification Quit starts a new activity when none is running.
         // Handle it here — onNewIntent is not called for a fresh launch —
@@ -47,6 +57,80 @@ class MainActivity : AppCompatActivity() {
 
     }
 
+    override fun onResume() {
+        super.onResume()
+        hideSystemUI()
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) {
+            hideSystemUI()
+        }
+    }
+
+    private fun hideSystemUI() {
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        val windowInsetsController = WindowCompat.getInsetsController(window, window.decorView)
+        windowInsetsController.hide(WindowInsetsCompat.Type.systemBars())
+        windowInsetsController.systemBarsBehavior =
+            WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+    }
+
+    fun toggleChatOverlay() {
+        val targetPackage = "com.kongjjj.overlay"
+        val isInstalled = try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                packageManager.getPackageInfo(targetPackage, PackageManager.PackageInfoFlags.of(0))
+            } else {
+                @Suppress("DEPRECATION")
+                packageManager.getPackageInfo(targetPackage, 0)
+            }
+            true
+        } catch (_: Exception) {
+            false
+        }
+
+        if (!isInstalled) {
+            Toast.makeText(this, "未安裝 Chat-overlay 應用程式，請先編譯安裝 Chat-overlay", Toast.LENGTH_LONG).show()
+            return
+        }
+
+        try {
+            val serviceIntent = Intent("com.kongjjj.overlay.ACTION_TOGGLE").apply {
+                setClassName(targetPackage, "com.kongjjj.overlay.FloatingViewService")
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                startForegroundService(serviceIntent)
+            } else {
+                startService(serviceIntent)
+            }
+        } catch (e: Exception) {
+            Log.e("MainActivity", "Failed to toggle FloatingViewService directly, trying MainActivity launch", e)
+            try {
+                val activityIntent = Intent().apply {
+                    setClassName(targetPackage, "com.kongjjj.overlay.MainActivity")
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                startActivity(activityIntent)
+            } catch (ex: Exception) {
+                Log.e("MainActivity", "Failed to launch Chat-overlay MainActivity", ex)
+                Toast.makeText(this, "無法開啟 Chat-overlay 懸浮聊天室", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    fun stopChatOverlayService() {
+        try {
+            val intent = Intent().apply {
+                setClassName("com.kongjjj.overlay", "com.kongjjj.overlay.FloatingViewService")
+            }
+            stopService(intent)
+        } catch (e: Exception) {
+            Log.e("MainActivity", "Failed to stop Chat-overlay service", e)
+        }
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
@@ -67,6 +151,13 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    override fun onDestroy() {
+        super.onDestroy()
+        if (isFinishing) {
+            stopChatOverlayService()
+        }
+    }
+
     fun exitApp() {
         // Unbind first: a started+bound service ignores stopService() until
         // every client unbinds. PreviewViewModel otherwise unbinds only in
@@ -84,6 +175,8 @@ class MainActivity : AppCompatActivity() {
         } catch (_: Exception) {
             // Optional companion service; ignore if absent
         }
+
+        stopChatOverlayService()
 
         finishAndRemoveTask()
     }

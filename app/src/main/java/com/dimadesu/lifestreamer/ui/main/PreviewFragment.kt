@@ -172,6 +172,7 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
             setContent {
                 TopLeftControlsBar(
                     onQuit = { (requireActivity() as? MainActivity)?.exitApp() },
+                    onToggleChat = { (requireActivity() as? MainActivity)?.toggleChatOverlay() },
                     onRtmpHelp = { startActivity(Intent(requireContext(), RtmpHelpActivity::class.java)) },
                     onSrtHelp = { startActivity(Intent(requireContext(), SrtHelpActivity::class.java)) },
                     onUvcHelp = { startActivity(Intent(requireContext(), UvcHelpActivity::class.java)) },

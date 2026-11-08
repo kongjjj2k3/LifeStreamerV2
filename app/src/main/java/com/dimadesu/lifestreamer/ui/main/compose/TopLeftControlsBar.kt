@@ -23,12 +23,13 @@ import androidx.compose.ui.unit.dp
 import com.dimadesu.lifestreamer.R
 
 /**
- * Top-left controls: a Quit button and a Help dropdown with links to the help screens.
+ * Top-left controls: a Quit button, a Chat button, and a Help dropdown.
  * Styled like the buttons in the bottom-right controls.
  */
 @Composable
 fun TopLeftControlsBar(
     onQuit: () -> Unit,
+    onToggleChat: () -> Unit,
     onRtmpHelp: () -> Unit,
     onSrtHelp: () -> Unit,
     onUvcHelp: () -> Unit,
@@ -78,6 +79,12 @@ fun TopLeftControlsBar(
             onClick = { showQuitConfirm = true }
         )
 
+        CameraControlButton(
+            iconRes = R.drawable.ic_chat,
+            contentDescription = "Chat",
+            onClick = onToggleChat
+        )
+
         Box {
             CameraControlButton(
                 iconRes = R.drawable.ic_baseline_help_outline_24,
@@ -111,6 +118,7 @@ private fun HelpMenuItem(textRes: Int, onClick: () -> Unit) {
 private fun TopLeftControlsBarPreview() {
     TopLeftControlsBar(
         onQuit = {},
+        onToggleChat = {},
         onRtmpHelp = {},
         onSrtHelp = {},
         onUvcHelp = {},

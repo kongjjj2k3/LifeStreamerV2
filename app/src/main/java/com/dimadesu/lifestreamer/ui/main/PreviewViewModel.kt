@@ -69,6 +69,7 @@ import com.dimadesu.lifestreamer.utils.ReconnectTimer
 import com.dimadesu.lifestreamer.utils.StreamConfigurationHelper
 import io.github.thibaultbee.streampack.core.elements.sources.video.camera.extensions.cameras
 import io.github.thibaultbee.streampack.core.elements.sources.video.camera.extensions.cameraManager
+import io.github.thibaultbee.streampack.core.elements.sources.video.camera.extensions.defaultCameraId
 import io.github.thibaultbee.streampack.core.configuration.mediadescriptor.UriMediaDescriptor
 import io.github.thibaultbee.streampack.core.elements.endpoints.MediaSinkType
 import io.github.thibaultbee.streampack.core.elements.sources.audio.audiorecord.IAudioRecordSource
@@ -86,9 +87,11 @@ import io.github.thibaultbee.streampack.core.elements.sources.video.IVideoSource
 import io.github.thibaultbee.streampack.core.configuration.mediadescriptor.MediaDescriptor
 import io.github.thibaultbee.streampack.core.elements.sources.video.camera.CameraSettings
 import io.github.thibaultbee.streampack.core.elements.sources.video.camera.ICameraSource
-import com.dimadesu.lifestreamer.camera.CompositionMode
-import com.dimadesu.lifestreamer.camera.DualCameraController
+import io.github.thibaultbee.streampack.core.elements.sources.video.camera.ConcurrentDualCameraSource
+import io.github.thibaultbee.streampack.core.elements.sources.video.camera.extensions.concurrentCameraPairs
+import io.github.thibaultbee.streampack.core.elements.processing.video.CompositionMode
 import io.github.thibaultbee.streampack.core.interfaces.setCameraId
+import io.github.thibaultbee.streampack.core.interfaces.setConcurrentDualCamera
 import io.github.thibaultbee.streampack.core.elements.sources.video.bitmap.IBitmapSource
 import io.github.thibaultbee.streampack.core.elements.sources.video.bitmap.BitmapSourceFactory
 import io.github.thibaultbee.streampack.core.streamers.single.VideoConfig
@@ -729,6 +732,15 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
     
     private val _availableCamerasLiveData = MutableLiveData<List<CameraInfo>>(emptyList())
     val availableCamerasLiveData: LiveData<List<CameraInfo>> = _availableCamerasLiveData
+
+    private val _concurrentCameraPairsLiveData = MutableLiveData<List<Pair<String, String>>>(emptyList())
+    val concurrentCameraPairsLiveData: LiveData<List<Pair<String, String>>> = _concurrentCameraPairsLiveData
+
+    private val _isConcurrentCameraActiveLiveData = MutableLiveData<Boolean>(false)
+    val isConcurrentCameraActiveLiveData: LiveData<Boolean> = _isConcurrentCameraActiveLiveData
+
+    private val _currentCompositionModeLiveData = MutableLiveData<CompositionMode>(CompositionMode.PIP_TOP_RIGHT)
+    val currentCompositionModeLiveData: LiveData<CompositionMode> = _currentCompositionModeLiveData
 
     init {
         // Bind to streaming service for background streaming capability
@@ -2845,6 +2857,11 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
         }
     }
 
+    fun resetPipLayout() {
+        _isConcurrentCameraActiveLiveData.postValue(false)
+        setCompositionMode(CompositionMode.PIP_TOP_RIGHT)
+    }
+
     @RequiresPermission(Manifest.permission.CAMERA)
     fun switchBackToFront(): Boolean {
         /**
@@ -2856,6 +2873,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
         if (videoSource is ICameraSource) {
             viewModelScope.launch(defaultDispatcher) {
                 videoSourceMutex.withLock {
+                    resetPipLayout()
                     streamer?.switchBackToFront(application)
                 }
             }
@@ -2865,11 +2883,6 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
 
     @RequiresPermission(Manifest.permission.CAMERA)
     fun toggleCamera() {
-        /**
-         * If video frame rate is not supported by the new camera, streamer will throw an
-         * exception instead of crashing. You can either catch the exception or check if the
-         * configuration is valid for the new camera with [Context.isFrameRateSupported].
-         */
         val currentStreamer = serviceStreamer
         if (currentStreamer == null) {
             Log.e(TAG, "Streamer service not available for camera toggle")
@@ -2882,9 +2895,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
             viewModelScope.launch(defaultDispatcher) {
                 videoSourceMutex.withLock {
                     try {
-                        // Add delay before switching camera to allow previous camera to fully release
-                        // This prevents resource conflicts when hot-swapping cameras
-                        delay(300)
+                        resetPipLayout()
                         currentStreamer.setNextCameraId(application)
                         Log.i(TAG, "Camera toggled successfully")
                     } catch (e: Exception) {
@@ -2904,6 +2915,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
         viewModelScope.launch(defaultDispatcher) {
             videoSourceMutex.withLock {
                 try {
+                    resetPipLayout()
                     currentStreamer.setCameraId(cameraId)
                     Log.i(TAG, "Selected camera: $cameraId")
                 } catch (e: Exception) {
@@ -3421,29 +3433,86 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                 }
                 
                 _availableCamerasLiveData.postValue(cameraList)
-                dualCameraController.loadPairs(cameraManager)
+                _concurrentCameraPairsLiveData.postValue(cameraManager.concurrentCameraPairs)
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to load cameras: ${e.message}")
                 _availableCamerasLiveData.postValue(emptyList())
-                dualCameraController.loadPairs(null)
+                _concurrentCameraPairsLiveData.postValue(emptyList())
             }
         }
     }
 
+    @SuppressLint("MissingPermission")
     fun toggleConcurrentDualCamera() {
-        dualCameraController.toggle(
-            context = application,
-            streamer = serviceStreamer,
-            scope = viewModelScope,
-            dispatcher = defaultDispatcher,
-            videoSourceMutex = videoSourceMutex
-        ) { error ->
-            _streamerErrorLiveData.postValue(error)
+        val currentStreamer = serviceStreamer
+        if (currentStreamer == null) {
+            Log.e(TAG, "Streamer service not available for dual camera toggle")
+            _streamerErrorLiveData.postValue("Service not available")
+            return
+        }
+
+        viewModelScope.launch(defaultDispatcher) {
+            videoSourceMutex.withLock {
+                try {
+                    if (_isConcurrentCameraActiveLiveData.value == true) {
+                        // Revert PiP off: restore single camera mode for the currently active main camera
+                        val activeSource = currentStreamer.videoInput?.sourceFlow?.value
+                        val currentMainCameraId = if (activeSource is ConcurrentDualCameraSource) {
+                            activeSource.primaryCameraId
+                        } else if (activeSource is ICameraSource) {
+                            activeSource.cameraId
+                        } else {
+                            application.cameraManager.defaultCameraId
+                        }
+
+                        resetPipLayout()
+                        currentStreamer.setCameraId(currentMainCameraId)
+                        Log.i(TAG, "Reverted PiP off to single camera: $currentMainCameraId")
+                    } else {
+                        // Activate PiP on: keep currently selected camera as full screen main camera
+                        val activeSource = currentStreamer.videoInput?.sourceFlow?.value
+                        val activeCameraId = if (activeSource is ICameraSource) {
+                            activeSource.cameraId
+                        } else {
+                            application.cameraManager.defaultCameraId
+                        }
+
+                        val pairs = application.cameraManager.concurrentCameraPairs
+                        val matchedPair = pairs.firstOrNull { it.first == activeCameraId || it.second == activeCameraId }
+                        if (matchedPair == null) {
+                            Log.w(TAG, "Concurrent camera streaming not supported for camera $activeCameraId")
+                            _streamerErrorLiveData.postValue("PIP not supported for the selected camera")
+                            return@withLock
+                        }
+                        val primaryId = activeCameraId
+                        val secondaryId =
+                            if (matchedPair.first == activeCameraId) matchedPair.second else matchedPair.first
+
+                        setCompositionMode(CompositionMode.PIP_TOP_RIGHT)
+                        val mode = CompositionMode.PIP_TOP_RIGHT
+                        currentStreamer.setConcurrentDualCamera(
+                            primaryCameraId = primaryId,
+                            secondaryCameraId = secondaryId,
+                            compositionMode = mode
+                        )
+                        _isConcurrentCameraActiveLiveData.postValue(true)
+                        Log.i(TAG, "Activated PiP dual camera: Main=$primaryId, PiP=$secondaryId ($mode)")
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to toggle concurrent dual camera", e)
+                    _streamerErrorLiveData.postValue("Dual camera error: ${e.message}")
+                }
+            }
         }
     }
 
     fun setCompositionMode(mode: CompositionMode) {
-        dualCameraController.setCompositionMode(serviceStreamer, mode)
+        _currentCompositionModeLiveData.postValue(mode)
+        val videoSource = serviceStreamer?.videoInput?.sourceFlow?.value
+        if (videoSource is ConcurrentDualCameraSource) {
+            videoSource.compositionMode = mode
+            serviceStreamer?.videoInput?.processor?.compositionMode = mode
+        }
     }
 
     @RequiresPermission(Manifest.permission.CAMERA)
@@ -4630,16 +4699,10 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
 
     fun getNoiseReductionModeName(mode: Int): String = CameraNoiseReductionController.getNoiseReductionModeName(mode)
 
-    val dualCameraController = DualCameraController()
-
-    val concurrentCameraPairsLiveData: LiveData<List<Pair<String, String>>> = dualCameraController.concurrentCameraPairs
-    val isConcurrentCameraActiveLiveData: LiveData<Boolean> = dualCameraController.isActive
-    val currentCompositionModeLiveData: LiveData<CompositionMode> = dualCameraController.compositionMode
-
     private fun notifySourceChanged() {
         val videoSource = streamer?.videoInput?.sourceFlow?.value ?: return
-        dualCameraController.onSourceChanged(videoSource, viewModelScope) { toast ->
-            _toastMessageLiveData.postValue(toast)
+        if (videoSource !is ConcurrentDualCameraSource && _isConcurrentCameraActiveLiveData.value == true) {
+            _isConcurrentCameraActiveLiveData.postValue(false)
         }
         if (videoSource is ICameraSource) {
             notifyCameraChanged(videoSource)
@@ -4935,6 +4998,18 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                 CaptureResult.CONTROL_AF_MODE_CONTINUOUS_PICTURE -> "Continuous Picture"
                 CaptureResult.CONTROL_AF_MODE_EDOF -> "EDOF"
                 else -> "Unknown"
+            }
+        }
+
+        fun getCompositionModeName(mode: CompositionMode): String {
+            return when (mode) {
+                CompositionMode.PIP_TOP_RIGHT -> "PiP (Top Right)"
+                CompositionMode.PIP_TOP_LEFT -> "PiP (Top Left)"
+                CompositionMode.PIP_BOTTOM_RIGHT -> "PiP (Bottom Right)"
+                CompositionMode.PIP_BOTTOM_LEFT -> "PiP (Bottom Left)"
+                CompositionMode.SIDE_BY_SIDE -> "Split (Side-by-Side)"
+                CompositionMode.TOP_BOTTOM -> "Split (Top-Bottom)"
+                CompositionMode.SINGLE -> "Single Camera"
             }
         }
     }

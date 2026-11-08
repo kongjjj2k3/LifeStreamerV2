@@ -4,10 +4,8 @@ import android.content.Context
 import android.util.Log
 import com.dimadesu.lifestreamer.data.storage.DataStoreRepository
 import com.dimadesu.lifestreamer.utils.dataStore
-import io.github.thibaultbee.streampack.core.elements.sources.audio.IAudioSource
 import io.github.thibaultbee.streampack.core.elements.sources.audio.IAudioSourceInternal
 import io.github.thibaultbee.streampack.core.elements.sources.audio.audiorecord.MicrophoneSourceFactory
-import io.github.thibaultbee.streampack.core.utils.InternalStreamPackApi
 import kotlinx.coroutines.flow.first
 
 /**
@@ -15,8 +13,7 @@ import kotlinx.coroutines.flow.first
  * Reads audio source type from user preferences.
  * Always forces recreation to ensure fresh AudioRecord with current settings.
  */
-@OptIn(InternalStreamPackApi::class)
-class ConditionalAudioSourceFactory : IAudioSource.Factory {
+class ConditionalAudioSourceFactory : IAudioSourceInternal.Factory {
     
     companion object {
         private const val TAG = "ConditionalAudioSrcFact"
