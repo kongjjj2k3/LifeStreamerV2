@@ -5,9 +5,8 @@ import java.util.Properties
 
 plugins {
     alias(libs.plugins.android.application)
-    alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
-    id("kotlin-kapt")
+    alias(libs.plugins.legacy.kapt)
 }
 
 android {
@@ -57,19 +56,9 @@ android {
         }
     }
     
-    applicationVariants.all {
-        outputs.all {
-            (this as com.android.build.gradle.internal.api.BaseVariantOutputImpl).outputFileName =
-                "LifeStreamer-v${versionName}-${name}.apk"
-        }
-    }
-    
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
-    }
-    kotlinOptions {
-        jvmTarget = "17"
     }
     buildFeatures {
         viewBinding = true
