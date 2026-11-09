@@ -64,8 +64,8 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.dimadesu.lifestreamer.R
+import com.dimadesu.lifestreamer.camera.CompositionMode
 import com.dimadesu.lifestreamer.ui.main.PreviewViewModel
-import io.github.thibaultbee.streampack.core.elements.processing.video.CompositionMode
 import java.util.Locale
 import kotlin.math.roundToInt
 

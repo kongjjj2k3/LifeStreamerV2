@@ -37,6 +37,7 @@ import kotlin.coroutines.resume
  * when building `AudioRecord` by using reflection to call `setPreferredDevice` on the builder
  * when supported.
  */
+@OptIn(InternalStreamPackApi::class)
 class BluetoothAudioSource(
     private val context: Context,
     private val preferredDevice: AudioDeviceInfo?,

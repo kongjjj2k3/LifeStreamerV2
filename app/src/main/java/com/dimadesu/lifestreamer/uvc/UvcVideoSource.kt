@@ -31,6 +31,7 @@ import java.util.concurrent.atomic.AtomicInteger
  * Provides continuous video frames from a USB camera via UVCAndroid library.
  * Supports dual output (streaming + preview) using surface processor.
  */
+@OptIn(InternalStreamPackApi::class)
 class UvcVideoSource(
     private val context: Context,
     private val cameraHelper: CameraHelper,

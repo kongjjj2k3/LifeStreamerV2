@@ -29,6 +29,7 @@ import io.github.thibaultbee.streampack.core.elements.utils.av.video.DynamicRang
 import io.github.thibaultbee.streampack.core.elements.utils.time.Timebase
 import io.github.thibaultbee.streampack.core.pipelines.IVideoDispatcherProvider
 
+@OptIn(InternalStreamPackApi::class)
 class RTMPVideoSource (
     private val context: Context,
     private val exoPlayer: ExoPlayer,

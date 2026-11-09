@@ -27,17 +27,18 @@ import io.github.thibaultbee.streampack.core.elements.sources.audio.AudioSourceC
 import io.github.thibaultbee.streampack.core.elements.sources.audio.IAudioSource
 import io.github.thibaultbee.streampack.core.elements.sources.audio.IAudioSourceInternal
 import io.github.thibaultbee.streampack.core.elements.sources.audio.audiorecord.IAudioRecordSource
-import io.github.thibaultbee.streampack.core.utils.InternalStreamPackApi
 import io.github.thibaultbee.streampack.core.elements.utils.time.TimeUtils
 import io.github.thibaultbee.streampack.core.logger.Logger
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import io.github.thibaultbee.streampack.core.utils.InternalStreamPackApi
 import java.nio.ByteBuffer
 import java.util.UUID
 
 /**
  * App-local copy of AudioRecordSource from StreamPack with public visibility so we can adapt buildAudioRecord.
  */
+@OptIn(InternalStreamPackApi::class)
 open class AudioRecordSource : IAudioSourceInternal, IAudioRecordSource {
     private var audioRecord: AudioRecord? = null
     private var _bufferSize: Int? = null
