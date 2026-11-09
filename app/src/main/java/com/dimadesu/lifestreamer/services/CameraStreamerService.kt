@@ -55,16 +55,19 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import com.dimadesu.lifestreamer.audio.BluetoothAudioSource
 import com.dimadesu.lifestreamer.audio.ScoOrchestrator
+import io.github.thibaultbee.streampack.core.pipelines.AudioInputMode
+import io.github.thibaultbee.streampack.core.utils.InternalStreamPackApi
 
 /**
  * CameraStreamerService extending StreamerService for camera streaming
  */
+@OptIn(InternalStreamPackApi::class)
 class CameraStreamerService : StreamerService<ISingleStreamer>(
     streamerFactory = object : StreamerFactory<ISingleStreamer> {
         override fun create(context: Context): ISingleStreamer {
             return SingleStreamer(
                 context,
-                audioInputMode = StreamerPipeline.AudioInputMode.PUSH
+                audioInputMode = AudioInputMode.PUSH
             )
         }
     },

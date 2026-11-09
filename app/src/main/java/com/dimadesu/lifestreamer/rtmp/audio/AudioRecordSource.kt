@@ -24,8 +24,10 @@ import android.os.Build
 import androidx.annotation.RequiresPermission
 // use AudioRecordEffect methods via the class
 import io.github.thibaultbee.streampack.core.elements.sources.audio.AudioSourceConfig
+import io.github.thibaultbee.streampack.core.elements.sources.audio.IAudioSource
 import io.github.thibaultbee.streampack.core.elements.sources.audio.IAudioSourceInternal
 import io.github.thibaultbee.streampack.core.elements.sources.audio.audiorecord.IAudioRecordSource
+import io.github.thibaultbee.streampack.core.utils.InternalStreamPackApi
 import io.github.thibaultbee.streampack.core.elements.utils.time.TimeUtils
 import io.github.thibaultbee.streampack.core.logger.Logger
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -292,9 +294,10 @@ open class AudioRecordSource : IAudioSourceInternal, IAudioRecordSource {
 }
 
 
+@OptIn(InternalStreamPackApi::class)
 abstract class AudioRecordSourceFactory(
     private val effects: Set<UUID>
-) : IAudioSourceInternal.Factory {
+) : IAudioSource.Factory {
     /**
      * Create an [AudioRecordSource] implementation.
      */

@@ -14,8 +14,10 @@ import io.github.thibaultbee.streampack.core.elements.processing.video.DefaultSu
 import io.github.thibaultbee.streampack.core.elements.processing.video.outputs.SurfaceOutput
 import io.github.thibaultbee.streampack.core.elements.sources.video.AbstractPreviewableSource
 import io.github.thibaultbee.streampack.core.elements.utils.time.Timebase
+import io.github.thibaultbee.streampack.core.elements.sources.video.IVideoSource
 import io.github.thibaultbee.streampack.core.elements.sources.video.IVideoSourceInternal
 import io.github.thibaultbee.streampack.core.elements.sources.video.VideoSourceConfig
+import io.github.thibaultbee.streampack.core.utils.InternalStreamPackApi
 import io.github.thibaultbee.streampack.core.elements.utils.av.video.DynamicRangeProfile
 import io.github.thibaultbee.streampack.core.pipelines.outputs.SurfaceDescriptor
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -422,7 +424,7 @@ class UvcVideoSource(
 
                 // Create surface processor
                 val processorFactory = DefaultSurfaceProcessorFactory()
-                surfaceProcessor = processorFactory.create(DynamicRangeProfile.sdr, dispatcherProvider)
+                surfaceProcessor = processorFactory.create(context, DynamicRangeProfile.sdr, dispatcherProvider)
 
                 // Create input surface for camera
                 val width = cachedWidth.get()
@@ -544,9 +546,10 @@ class UvcVideoSource(
     /**
      * Factory for creating UVC video source instances
      */
+    @OptIn(InternalStreamPackApi::class)
     class Factory(
         private val cameraHelper: CameraHelper
-    ) : IVideoSourceInternal.Factory {
+    ) : IVideoSource.Factory {
         override suspend fun create(
             context: Context,
             dispatcherProvider: io.github.thibaultbee.streampack.core.pipelines.IVideoDispatcherProvider
