@@ -90,7 +90,6 @@ import io.github.thibaultbee.streampack.core.elements.sources.video.camera.ICame
 import com.dimadesu.lifestreamer.camera.CompositionMode
 import com.dimadesu.lifestreamer.camera.concurrentCameraPairs
 import com.dimadesu.lifestreamer.camera.ConcurrentDualCameraSource
-import com.dimadesu.lifestreamer.camera.ConcurrentDualCameraSource.Companion.primaryCameraId
 import com.dimadesu.lifestreamer.camera.setConcurrentDualCamera
 import io.github.thibaultbee.streampack.core.interfaces.setCameraId
 import io.github.thibaultbee.streampack.core.elements.sources.video.bitmap.IBitmapSource
@@ -3518,7 +3517,6 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
         val videoSource = serviceStreamer?.videoInput?.sourceFlow?.value
         if (videoSource is ConcurrentDualCameraSource) {
             videoSource.compositionMode = mode
-            serviceStreamer?.videoInput?.processor?.compositionMode = mode
         }
     }
 
