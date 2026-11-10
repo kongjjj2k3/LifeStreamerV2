@@ -384,15 +384,11 @@ class ConcurrentDualCameraSource internal constructor(
         } catch (_: Throwable) {}
 
         resetOutputImpl()
-
-        // Give the camera HAL time to free both devices before the next camera source opens.
-        delay(CAMERA_RELEASE_DELAY_MS)
     }
 
     companion object {
         private const val TAG = "ConcurrentDualCameraSource"
         private const val MAX_PREVIEW_DIMENSION = 1280
-        internal const val CAMERA_RELEASE_DELAY_MS = 200L
     }
 }
 
@@ -414,9 +410,6 @@ class ConcurrentDualCameraSourceFactory(
         context: Context,
         dispatcherProvider: IVideoDispatcherProvider
     ): IVideoSourceInternal {
-        // Give the camera HAL time to free a previously active single camera before opening both.
-        delay(ConcurrentDualCameraSource.CAMERA_RELEASE_DELAY_MS)
-
         val primaryCameraSource =
             CameraSourceFactory(primaryCameraId).create(context, dispatcherProvider) as AbstractPreviewableSource
         val secondaryCameraSource =
