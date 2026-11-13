@@ -12,31 +12,26 @@ import android.view.Surface
 import androidx.annotation.RequiresPermission
 import io.github.thibaultbee.streampack.core.elements.processing.video.IInputResolver
 import io.github.thibaultbee.streampack.core.elements.processing.video.ISurfaceProcessorInternal
-import io.github.thibaultbee.streampack.core.elements.processing.video.outputs.SurfaceOutput
 import io.github.thibaultbee.streampack.core.elements.processing.video.source.ISourceInfoProvider
 import io.github.thibaultbee.streampack.core.elements.sources.video.AbstractPreviewableSource
 import io.github.thibaultbee.streampack.core.elements.sources.video.ISurfaceProcessorAwareSource
 import io.github.thibaultbee.streampack.core.elements.sources.video.ISurfaceSourceInternal
 import io.github.thibaultbee.streampack.core.elements.sources.video.IVideoSourceInternal
+import io.github.thibaultbee.streampack.core.elements.sources.video.SurfaceProcessorPreviewHelper
 import io.github.thibaultbee.streampack.core.elements.sources.video.VideoSourceConfig
 import io.github.thibaultbee.streampack.core.elements.sources.video.camera.CameraSettings
 import io.github.thibaultbee.streampack.core.elements.sources.video.camera.CameraSourceFactory
 import io.github.thibaultbee.streampack.core.elements.sources.video.camera.ICameraSource
 import io.github.thibaultbee.streampack.core.elements.sources.video.camera.ICameraSourceInternal
-import io.github.thibaultbee.streampack.core.elements.utils.extensions.displayRotation
-import io.github.thibaultbee.streampack.core.elements.utils.extensions.rotate
 import io.github.thibaultbee.streampack.core.logger.Logger
 import io.github.thibaultbee.streampack.core.pipelines.IVideoDispatcherProvider
 import io.github.thibaultbee.streampack.core.utils.InternalStreamPackApi
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlin.math.abs
-import kotlin.math.max
-import kotlin.math.roundToInt
 
 /**
  * A video source that captures video from two cameras concurrently (e.g. front and rear)
@@ -115,9 +110,14 @@ class ConcurrentDualCameraSource internal constructor(
      * The preview shows the composited frame rendered by the surface processor, not the raw
      * primary camera frames. It is attached to the processor as an additional output.
      */
-    private var previewSurface: Surface? = null
-    private var previewOutput: SurfaceOutput? = null
-    private var previewSize: Size? = null
+    private val previewHelper = SurfaceProcessorPreviewHelper(
+        context = context,
+        infoProvider = { infoProviderFlow.value },
+        isStreaming = { true },
+        // Front camera selfie view in the preview only; the stream is not mirrored.
+        needMirroring = { true },
+        maxPreviewDimension = MAX_PREVIEW_DIMENSION
+    )
 
     // Cameras must feed the processor while previewing, even when not streaming.
     private val camerasMutex = Mutex()
@@ -177,51 +177,7 @@ class ConcurrentDualCameraSource internal constructor(
     override fun setSurfaceProcessor(processor: ISurfaceProcessorInternal) {
         this.surfaceProcessor = processor
         processor.inputResolver = this
-        attachPreviewOutput()
-    }
-
-    private fun detachPreviewOutput() {
-        previewOutput?.let { surfaceProcessor?.removeOutputSurface(it) }
-        previewOutput = null
-    }
-
-    private fun attachPreviewOutput() {
-        val processor = surfaceProcessor ?: return
-        val surface = previewSurface ?: return
-        val size = previewSize ?: return
-
-        val rotation = context.displayRotation
-        if (previewOutput != null &&
-            previewOutput?.targetResolution == size &&
-            previewOutput?.targetRotation == rotation
-        ) {
-            return
-        }
-
-        // The processor drops its outputs when the input resolution changes: always re-add.
-        detachPreviewOutput()
-        try {
-            val baseProvider = infoProviderFlow.value
-            // The composited frame is already upright and sized as the preview: no letterboxing.
-            val previewInfoProvider = object : ISourceInfoProvider by baseProvider {
-                override fun getSurfaceSize(targetResolution: Size) =
-                    targetResolution.rotate(baseProvider.getRelativeRotationDegrees(rotation, false))
-            }
-            val output = SurfaceOutput(
-                targetSurface = surface,
-                targetResolution = size,
-                targetRotation = rotation,
-                isStreaming = { true },
-                sourceResolution = size,
-                // Front camera selfie view in the preview only; the stream is not mirrored.
-                needMirroring = true,
-                sourceInfoProvider = previewInfoProvider
-            )
-            processor.addOutputSurface(output)
-            previewOutput = output
-        } catch (t: Throwable) {
-            Logger.w(TAG, "Failed to attach preview output: ${t.message}")
-        }
+        previewHelper.setSurfaceProcessor(processor)
     }
 
     @SuppressLint("MissingPermission")
@@ -266,12 +222,12 @@ class ConcurrentDualCameraSource internal constructor(
         } else {
             Logger.w(TAG, "SurfaceProcessor not set on ConcurrentDualCameraSource when setting output")
         }
-        attachPreviewOutput()
+        previewHelper.attachIfReady()
     }
 
     @SuppressLint("MissingPermission")
     override suspend fun resetOutputImpl() {
-        detachPreviewOutput()
+        previewHelper.detachOutput()
         primaryCameraSource.resetOutput()
         secondaryCameraSource.resetOutput()
         secondarySurface?.let {
@@ -301,16 +257,8 @@ class ConcurrentDualCameraSource internal constructor(
      * The preview is the composited frame, already rotated upright: returns a size with the
      * orientation of [targetSize] instead of a sensor size.
      */
-    override fun <T> getPreviewSize(targetSize: Size, targetClass: Class<T>): Size {
-        val scale = minOf(1f, MAX_PREVIEW_DIMENSION.toFloat() / max(targetSize.width, targetSize.height))
-        val size = Size(
-            (targetSize.width * scale).roundToInt().coerceAtLeast(2) and 1.inv(),
-            (targetSize.height * scale).roundToInt().coerceAtLeast(2) and 1.inv()
-        )
-        // Only remembered: the output is attached by setPreview, once the new surface exists.
-        previewSize = size
-        return size
-    }
+    override fun <T> getPreviewSize(targetSize: Size, targetClass: Class<T>): Size =
+        previewHelper.selectPreviewSize(targetSize)
 
     @RequiresPermission(Manifest.permission.CAMERA)
     override suspend fun startStream() {
@@ -346,21 +294,16 @@ class ConcurrentDualCameraSource internal constructor(
         _isPreviewingFlow.value = false
     }
 
-    override suspend fun hasPreview(): Boolean = previewSurface != null
+    override suspend fun hasPreview(): Boolean = previewHelper.hasPreview()
 
     @RequiresPermission(Manifest.permission.CAMERA)
     override suspend fun setPreview(surface: Surface) {
-        previewSurface = surface
-        if (previewSize == null) {
-            previewSize = savedConfig?.resolution
-        }
-        attachPreviewOutput()
+        previewHelper.setPreview(surface) { savedConfig?.resolution }
     }
 
     @SuppressLint("MissingPermission")
     override suspend fun resetPreviewImpl() {
-        detachPreviewOutput()
-        previewSurface = null
+        previewHelper.resetPreview()
     }
 
     override suspend fun setOnFirstFrameListener(listener: () -> Unit) {
@@ -383,7 +326,9 @@ class ConcurrentDualCameraSource internal constructor(
             secondaryCameraSource.release()
         } catch (_: Throwable) {}
 
+        previewHelper.release()
         resetOutputImpl()
+        surfaceProcessor = null
     }
 
     companion object {
@@ -433,4 +378,3 @@ class ConcurrentDualCameraSourceFactory(
         return "ConcurrentDualCameraSourceFactory(primary=$primaryCameraId, secondary=$secondaryCameraId, mode=$compositionMode)"
     }
 }
-
