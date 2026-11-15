@@ -1,5 +1,7 @@
 package com.dimadesu.lifestreamer.audio
 
+import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothDevice
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -10,6 +12,7 @@ import androidx.core.content.ContextCompat
 import io.github.thibaultbee.streampack.core.interfaces.IWithAudioSource
 import io.github.thibaultbee.streampack.core.streamers.single.ISingleStreamer
 import io.github.thibaultbee.streampack.core.elements.sources.IMediaProjectionSource
+import com.dimadesu.lifestreamer.rtmp.audio.ExoPlayerAudioSource
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -25,13 +28,13 @@ import kotlinx.coroutines.sync.withLock
 /**
  * Manages Bluetooth audio routing and SCO (Synchronous Connection Oriented) link negotiation
  * for streaming and audio passthrough.
- * 
+ *
  * This class encapsulates all Bluetooth HFP/SCO orchestration logic including:
  * - Device detection and monitoring
  * - SCO negotiation and state management
  * - Device connect/disconnect handling
  * - Audio source switching between built-in mic and Bluetooth
- * 
+ *
  * @param context Application context
  * @param scope CoroutineScope for background operations
  * @param bluetoothConnectPermissionRequest Flow to request BLUETOOTH_CONNECT permission from UI
@@ -42,22 +45,22 @@ class BluetoothAudioManager(
     private val bluetoothConnectPermissionRequest: MutableSharedFlow<Unit>
 ) {
     private val scoOrchestrator = ScoOrchestrator(context, scope, bluetoothConnectPermissionRequest)
-    
+
     private val scoMutex = Mutex()
     private var scoSwitchJob: Job? = null
     private var scoDisconnectReceiver: BroadcastReceiver? = null
     private var btDeviceReceiver: BroadcastReceiver? = null
     private var btDeviceMonitorJob: Job? = null
     @Volatile private var isHandlingDisconnect = false
-    
+
     /**
      * SCO negotiation state exposed to UI
      */
     enum class ScoState { IDLE, TRYING, USING_BT, FAILED, DISCONNECTED }
-    
+
     private val _scoStateFlow = MutableStateFlow(ScoState.IDLE)
     val scoStateFlow: StateFlow<ScoState> = _scoStateFlow.asStateFlow()
-    
+
     /**
      * Tracks if SCO was started specifically for passthrough monitoring
      */
@@ -68,7 +71,7 @@ class BluetoothAudioManager(
      * Apply Bluetooth mic policy at runtime.
      * When enabled: Just saves preference. BT connection is deferred until streaming/monitoring starts.
      * When disabled: Stops SCO orchestration and reverts to built-in mic.
-     * 
+     *
      * @param enabled Whether to enable Bluetooth mic preference
      * @param streamer Optional streamer instance for audio source switching
      * @param isStreaming Whether currently streaming
@@ -79,23 +82,24 @@ class BluetoothAudioManager(
         if (!enabled) {
             // Cancel SCO orchestration and cleanup
             scoSwitchJob?.cancel()
-            
+
             // Unregister SCO disconnect receiver BEFORE stopping SCO to prevent
             // duplicate recreateMicSource calls from the broadcast
             unregisterScoDisconnectReceiver()
             unregisterBtDeviceReceiver()
-            
+
             // Switch to built-in mic BEFORE stopping SCO to prevent audio routing issues
 
             if (streamer != null) {
                 scope.launch(Dispatchers.Default) {
                     try {
                         val audioStreamer = streamer as? IWithAudioSource
-                        val isMediaProjectionActive = audioStreamer?.audioInput?.sourceFlow?.value is IMediaProjectionSource
+                        val currentSource = audioStreamer?.audioInput?.sourceFlow?.value
+                        val isMediaProjectionActive = currentSource is IMediaProjectionSource || currentSource is ExoPlayerAudioSource
 
                         if (isMediaProjectionActive) {
-                            // SYS AUDIO is active — just stop SCO/cleanup, don't touch the audio source
-                            Log.i(TAG, "applyPolicy disable: MediaProjection audio active, only stopping SCO")
+                            // Non-mic audio is active — just stop SCO/cleanup, don't touch the audio source
+                            Log.i(TAG, "applyPolicy disable: Non-mic audio active, only stopping SCO")
                             stopScoAndResetAudio()
                             BluetoothAudioConfig.setPreferredDevice(null)
                             _scoStateFlow.tryEmit(ScoState.IDLE)
@@ -112,26 +116,27 @@ class BluetoothAudioManager(
                             audioStreamer?.setAudioSource(ConditionalAudioSourceFactory())
                             delay(200)
                         }
-                        
+
                         // Step 2: Now stop SCO and reset audio mode
                         Log.i(TAG, "applyPolicy disable: Step 2 - stop SCO and reset audio")
                         stopScoAndResetAudio()
                         BluetoothAudioConfig.setPreferredDevice(null)
                         delay(300)
-                        
+
                         // Step 3: Recreate audio source with fresh AudioRecord.
                         // Skip when SYS AUDIO is taking over — ViewModel sets MP via
                         // setAudioSourceBasedOnVideoSource() and any source switch here
                         // would race and override it.
-                        // Also re-check at runtime in case SYS AUDIO activated during delays.
-                        val isMediaProjectionNow = audioStreamer?.audioInput?.sourceFlow?.value is IMediaProjectionSource
+                        // Also re-check at runtime in case SYS AUDIO / ExoPlayer activated during delays.
+                        val nowSource = audioStreamer?.audioInput?.sourceFlow?.value
+                        val isMediaProjectionNow = nowSource is IMediaProjectionSource || nowSource is ExoPlayerAudioSource
                         if (sysAudioTransition || isMediaProjectionNow) {
-                            Log.i(TAG, "applyPolicy disable: Step 3 skipped - SYS AUDIO transition or MediaProjection now active")
+                            Log.i(TAG, "applyPolicy disable: Step 3 skipped - SYS AUDIO transition or non-mic source now active")
                         } else {
                             Log.i(TAG, "applyPolicy disable: Step 3 - recreate audio source")
                             audioStreamer?.setAudioSource(ConditionalAudioSourceFactory())
                         }
-                        
+
                         delay(150)
                         _scoStateFlow.tryEmit(ScoState.IDLE)
                     } catch (t: Throwable) {
@@ -174,7 +179,7 @@ class BluetoothAudioManager(
                 Log.i(TAG, "applyPolicy: BT toggle ON, deferring connection until streaming/monitoring starts")
                 _scoStateFlow.tryEmit(ScoState.IDLE)
             }
-            
+
             // Register device monitoring
             registerBtDeviceReceiver()
         }
@@ -183,7 +188,7 @@ class BluetoothAudioManager(
     /**
      * Called when streaming starts. If BT toggle is ON, attempts to connect BT mic.
      * If connection fails, reverts the toggle and caller should show a toast.
-     * 
+     *
      * @param streamer The streamer instance
      * @return true if BT is not enabled or connection succeeded, false if connection failed (toggle reverted)
      */
@@ -192,12 +197,12 @@ class BluetoothAudioManager(
             Log.i(TAG, "onStreamingStarted: BT toggle is OFF, skipping")
             return
         }
-        
+
         if (streamer == null) {
             Log.w(TAG, "onStreamingStarted: streamer is null")
             return
         }
-        
+
         Log.i(TAG, "onStreamingStarted: BT toggle is ON, attempting SCO negotiation")
         scoSwitchJob?.cancel()
         scoSwitchJob = scope.launch(Dispatchers.Default) {
@@ -238,7 +243,7 @@ class BluetoothAudioManager(
 
         scoMutex.withLock {
             _scoStateFlow.tryEmit(ScoState.TRYING)
-            
+
             // Check if already using Bluetooth source
             val audioInput = (streamerInstance as? IWithAudioSource)?.audioInput
             val currentSource = audioInput?.sourceFlow?.value
@@ -285,16 +290,16 @@ class BluetoothAudioManager(
      */
     suspend fun startScoForPassthrough(): Boolean {
         if (!BluetoothAudioConfig.isEnabled()) return false
-        
+
         // Ensure permission FIRST - on Android 12+ we need BLUETOOTH_CONNECT to detect devices
         if (!scoOrchestrator.ensurePermission()) {
             Log.w(TAG, "Passthrough SCO: BLUETOOTH_CONNECT permission missing - requesting")
             _scoStateFlow.tryEmit(ScoState.FAILED)
             return false
         }
-        
+
         _scoStateFlow.tryEmit(ScoState.TRYING)
-        
+
         // Now safe to detect device after permission check
         val btDevice = scoOrchestrator.detectBtInputDevice()
         if (btDevice == null) {
@@ -317,10 +322,10 @@ class BluetoothAudioManager(
 
         scoStartedForPassthrough = true
         Log.i(TAG, "Passthrough SCO: connected successfully")
-        
+
         // Set audio mode for better routing
         setAudioMode(AudioManager.MODE_IN_COMMUNICATION)
-        
+
         // Verify routing
         verifyAndEmitUsingBtOrFail(2000)
         return true
@@ -341,7 +346,7 @@ class BluetoothAudioManager(
     /**
      * Verify actual platform routing before emitting USING_BT state.
      * Uses ScoOrchestrator.isScoActive() which handles API-level differences.
-     * 
+     *
      * @param timeoutMs Maximum time to wait for verification
      * @param pollMs Polling interval
      * @return true if verification succeeded and USING_BT emitted, false if FAILED emitted
@@ -349,14 +354,14 @@ class BluetoothAudioManager(
     private suspend fun verifyAndEmitUsingBtOrFail(timeoutMs: Long = 2000, pollMs: Long = 250): Boolean {
         val deadline = System.currentTimeMillis() + timeoutMs
         var attempt = 0
-        
+
         while (System.currentTimeMillis() < deadline) {
             attempt++
             val isScoActive = try { scoOrchestrator.isScoActive() } catch (_: Throwable) { false }
             val btDevice = try { scoOrchestrator.detectBtInputDevice() } catch (_: Throwable) { null }
-            
+
             Log.d(TAG, "verifyAndEmitUsingBtOrFail: attempt=$attempt isScoActive=$isScoActive btDeviceId=${btDevice?.id ?: -1}")
-            
+
             if (isScoActive || btDevice != null) {
                 _scoStateFlow.tryEmit(ScoState.USING_BT)
                 Log.i(TAG, "verifyAndEmitUsingBtOrFail: confirmed SCO routing - emitted USING_BT")
@@ -364,7 +369,7 @@ class BluetoothAudioManager(
             }
             delay(pollMs)
         }
-        
+
         Log.i(TAG, "verifyAndEmitUsingBtOrFail: failed to confirm SCO routing after ${timeoutMs}ms - emitting FAILED")
         _scoStateFlow.tryEmit(ScoState.FAILED)
         return false
@@ -375,7 +380,7 @@ class BluetoothAudioManager(
      */
     private fun registerScoDisconnectReceiver(streamerInstance: ISingleStreamer?) {
         if (scoDisconnectReceiver != null) return
-        
+
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context?, intent: Intent?) {
                 intent?.let { i ->
@@ -389,7 +394,7 @@ class BluetoothAudioManager(
                 }
             }
         }
-        
+
         val filter = IntentFilter(AudioManager.ACTION_SCO_AUDIO_STATE_UPDATED)
         ContextCompat.registerReceiver(context, receiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
         scoDisconnectReceiver = receiver
@@ -423,28 +428,28 @@ class BluetoothAudioManager(
      */
     private fun registerBtDeviceReceiver() {
         if (btDeviceReceiver != null) return
-        
+
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context?, intent: Intent?) {
                 val action = intent?.action ?: return
                 Log.d(TAG, "BT device receiver action=$action")
-                
-                if (action == android.bluetooth.BluetoothDevice.ACTION_ACL_DISCONNECTED ||
-                    action == android.bluetooth.BluetoothAdapter.ACTION_CONNECTION_STATE_CHANGED) {
+
+                if (action == BluetoothDevice.ACTION_ACL_DISCONNECTED ||
+                    action == BluetoothAdapter.ACTION_CONNECTION_STATE_CHANGED) {
                     handleDeviceDisconnect()
                 }
             }
         }
-        
+
         val filter = IntentFilter().apply {
-            addAction(android.bluetooth.BluetoothDevice.ACTION_ACL_DISCONNECTED)
-            addAction(android.bluetooth.BluetoothDevice.ACTION_ACL_CONNECTED)
-            addAction(android.bluetooth.BluetoothAdapter.ACTION_CONNECTION_STATE_CHANGED)
+            addAction(BluetoothDevice.ACTION_ACL_DISCONNECTED)
+            addAction(BluetoothDevice.ACTION_ACL_CONNECTED)
+            addAction(BluetoothAdapter.ACTION_CONNECTION_STATE_CHANGED)
         }
-        
+
         ContextCompat.registerReceiver(context, receiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
         btDeviceReceiver = receiver
-        
+
         // Start polling monitor as fallback
         startDeviceMonitor()
     }
@@ -460,13 +465,13 @@ class BluetoothAudioManager(
                     val headsetConnected = scoOrchestrator.isHeadsetConnected()
                     if (!headsetConnected) btDevice = null
                 }
-                
+
                 Log.d(TAG, "BT device disconnect: detected btDevice=${btDevice?.id ?: -1}")
-                
+
                 if (btDevice == null) {
                     Log.i(TAG, "BT device disconnected and no BT input remains - reverting policy")
                     revertPolicy()
-                    
+
                     if (scoStartedForPassthrough) {
                         stopScoForPassthrough()
                     }
@@ -488,14 +493,14 @@ class BluetoothAudioManager(
                 try {
                     val btDevice = scoOrchestrator.detectBtInputDevice()
                     val headsetConnected = if (btDevice == null) scoOrchestrator.isHeadsetConnected() else true
-                    
+
                     if (btDevice != null || headsetConnected) {
                         consecutiveMisses = 0
                     } else {
                         consecutiveMisses++
                         Log.d(TAG, "BT monitor: no device found (misses=$consecutiveMisses)")
                     }
-                    
+
                     if (consecutiveMisses >= 2) {
                         Log.i(TAG, "BT monitor: device missing for multiple checks - reverting policy")
                         revertPolicy()
@@ -520,7 +525,7 @@ class BluetoothAudioManager(
             btDeviceReceiver?.let { context.unregisterReceiver(it) }
         } catch (_: Throwable) {}
         btDeviceReceiver = null
-        
+
         btDeviceMonitorJob?.cancel()
         btDeviceMonitorJob = null
     }
@@ -562,7 +567,7 @@ class BluetoothAudioManager(
         // Use ScoOrchestrator to stop SCO - handles API level differences
         scoOrchestrator.stopScoQuietly()
         Log.d(TAG, "stopScoQuietly called via ScoOrchestrator")
-        
+
         // Reset audio mode to normal
         setAudioMode(AudioManager.MODE_NORMAL)
         Log.d(TAG, "Audio mode set to NORMAL")
@@ -600,9 +605,10 @@ class BluetoothAudioManager(
             scope.launch(Dispatchers.Default) {
                 try {
                     val audioInput = (streamerInstance as? IWithAudioSource)?.audioInput
-                    // Don't overwrite MediaProjection audio source (e.g. SYS AUDIO active)
-                    if (audioInput?.sourceFlow?.value is IMediaProjectionSource) {
-                        Log.i(TAG, "Recreate mic source: skipped - MediaProjection audio is active")
+                    // Don't overwrite MediaProjection or ExoPlayer audio source
+                    val currentSource = audioInput?.sourceFlow?.value
+                    if (currentSource is IMediaProjectionSource || currentSource is ExoPlayerAudioSource) {
+                        Log.i(TAG, "Recreate mic source: skipped - non-mic audio source is active")
                         return@launch
                     }
                     // After BT disconnect, current source is BluetoothAudioSource which won't match

@@ -311,7 +311,7 @@ fun RtmpSettingsBottomDrawer(
                                 modifier = Modifier.weight(1f)
                             ) {
                                 Text(
-                                    text = "− ${stringResource(R.string.rtmp_source_remove_title)}",
+                                    text = "- ${stringResource(R.string.rtmp_source_remove_title)}",
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.SemiBold
                                 )
