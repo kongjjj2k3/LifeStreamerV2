@@ -1,7 +1,6 @@
-package com.dimadesu.lifestreamer.ui.main
-
 import android.app.Application
 import android.content.Context
+import android.os.SystemClock
 import android.util.Log
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
@@ -48,6 +47,16 @@ import kotlin.coroutines.cancellation.CancellationException
 
 internal object RtmpSourceSwitchHelper {
     private const val TAG = "RtmpSourceSwitchHelper"
+    internal const val MIN_STATUS_DISPLAY_MS = 1_000L
+
+    /**
+     * Compute how long to keep the current "Playing RTMP" / "Trying to play RTMP" status
+     * visible before switching to a failure message, so fast connection errors don't flicker.
+     */
+    internal fun remainingStatusDisplayMs(
+        elapsedMs: Long,
+        minDisplayMs: Long = MIN_STATUS_DISPLAY_MS
+    ): Long = (minDisplayMs - elapsedMs.coerceAtLeast(0L)).coerceAtLeast(0L)
 
     /**
      * Check if the URL is an SRT URL.
@@ -241,6 +250,15 @@ internal object RtmpSourceSwitchHelper {
         // Start retry loop - use Main dispatcher for ExoPlayer thread safety
         // Return the Job so caller can cancel it when switching back to camera
         return CoroutineScope(Dispatchers.Main).launch {
+            var attemptStartTimeMs = 0L
+
+            suspend fun ensureMinAttemptStatusVisible() {
+                val remainingMs = remainingStatusDisplayMs(SystemClock.elapsedRealtime() - attemptStartTimeMs)
+                if (remainingMs > 0) {
+                    delay(remainingMs)
+                }
+            }
+
             suspend fun handleAttemptFailure(
                 statusMessage: String,
                 playerToRelease: ExoPlayer? = null
@@ -253,6 +271,7 @@ internal object RtmpSourceSwitchHelper {
                         onBitmapFallback?.invoke()
                     }
                 }
+                ensureMinAttemptStatusVisible()
                 if (isActive) {
                     postRtmpStatus(statusMessage)
                 }
@@ -268,6 +287,7 @@ internal object RtmpSourceSwitchHelper {
                     if (!isActive) break
 
                     // Show status message
+                    attemptStartTimeMs = SystemClock.elapsedRealtime()
                     if (isFirstAttempt) {
                         postRtmpStatus("Playing RTMP")
                         Log.i(TAG, "Attempting to connect to RTMP source: $videoSourceUrl (first attempt)")
@@ -391,6 +411,7 @@ internal object RtmpSourceSwitchHelper {
                     throw e
                 } catch (e: Exception) {
                     Log.e(TAG, "switchToRtmpSource unexpected error: ${e.message}", e)
+                    ensureMinAttemptStatusVisible()
                     // Wait and retry
                     if (isActive) {
                         postRtmpStatus("Couldn't play RTMP stream. Retrying in 5 seconds")
