@@ -1,3 +1,5 @@
+package com.dimadesu.lifestreamer.ui.main
+
 import android.app.Application
 import android.content.Context
 import android.os.SystemClock

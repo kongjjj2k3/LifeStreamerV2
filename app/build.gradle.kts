@@ -20,7 +20,7 @@ android {
         compileSdk = 37
 
         versionCode = 45
-        versionName = "2.16.0a"
+        versionName = "2.16.2a"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
