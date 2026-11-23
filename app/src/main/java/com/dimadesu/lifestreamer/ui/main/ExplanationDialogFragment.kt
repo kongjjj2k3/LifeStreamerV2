@@ -26,7 +26,7 @@ class ExplanationDialogFragment : DialogFragment() {
 
         fun newInstance(titleRes: Int, messageRes: Int, requestKey: String) =
             ExplanationDialogFragment().apply {
-                arguments = Bundle().apply {
+                arguments = Bundle(3).apply {
                     putInt(ARG_TITLE, titleRes)
                     putInt(ARG_MESSAGE, messageRes)
                     putString(ARG_REQUEST_KEY, requestKey)
@@ -43,10 +43,10 @@ class ExplanationDialogFragment : DialogFragment() {
             .setTitle(titleRes)
             .setMessage(messageRes)
             .setPositiveButton(R.string.continue_button) { _, _ ->
-                setFragmentResult(requestKey, Bundle().apply { putBoolean(RESULT_CONFIRMED, true) })
+                setFragmentResult(requestKey, Bundle(1).apply { putBoolean(RESULT_CONFIRMED, true) })
             }
             .setNegativeButton(android.R.string.cancel) { _, _ ->
-                setFragmentResult(requestKey, Bundle().apply { putBoolean(RESULT_CONFIRMED, false) })
+                setFragmentResult(requestKey, Bundle(1).apply { putBoolean(RESULT_CONFIRMED, false) })
             }
             .create()
     }

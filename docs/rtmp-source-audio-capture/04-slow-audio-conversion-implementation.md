@@ -19,12 +19,18 @@ Implemented the audio conversion, resampling, and buffering latency optimization
    - Updated `ringBufferOverflowCapsFillLevelAndKeepsNewestFrameAlignedData` for the `160 ms` cap (`30,720` bytes at 48 kHz stereo) and verified `flushRingBuffer()` behavior.
    - Updated `sampleRateConversion44100To48000ProducesNonZeroOutputAndImmediateAudio` and added `downsamplingFloatMono48000ToStereo44100PreservesContinuityAndImmediateOutput` to check immediate output availability, stereo channel duplication, signal amplitude, and cross-chunk continuity.
 
-### Summary
+### Verification
+- Ran `./gradlew :app:testDebugUnitTest :app:assembleDebug`:
+  - `BUILD SUCCESSFUL` with zero Kotlin warnings in the modified code.
+  - All 14 unit tests passed (`RtmpAudioBridgeTest`: 7/7, `CameraNoiseReductionControllerTest`: 3/3, `RtmpSourceSettingsTest`: 3/3, `ExampleUnitTest`: 1/1; 0 skipped, 0 failed).
+
+---
+
 In simple terms, think of the audio pipeline like a **conveyor belt** between the incoming RTMP video player and the outgoing live stream:
 
 1. **Before (why it was delayed):**
    - **Too many slow stations on the belt:** When the incoming audio didn't match your stream settings (for example, 44.1 kHz vs. 48 kHz, or mono vs. stereo), the app handed the audio through **three separate converter steps**, including a heavy-duty tool built for changing music speed and pitch (`Sonic`). While it was busy converting, the outgoing stream had to wait at the door because they shared the same lock.
-   - **A long line built up and never shrank:** While the video player was getting ready to start, about **half a second to three-quarters of a second** of audio piled up in a waiting queue before the video even appeared on screen. Because the outgoing stream only pulled audio out at normal 1x speed, that half-second line never got any shorter—so audio stayed permanently half a second behind the video.
+   - **A long line built up and never shrank:** While the video player was getting ready to start, about **half a second to three-quarters of a second** of audio piled up in a waiting queue before the video even appeared on screen. Because the outgoing stream only pulled audio out at normal 1× speed, that half-second line never got any shorter—so audio stayed permanently half a second behind the video.
 
 2. **Now (what we changed):**
    - **One fast step instead of three:** Format conversion, mono/stereo mixing, and sample-rate conversion now happen in **one lightweight step** before touching the shared queue, so the outgoing stream never gets held up waiting for conversion.

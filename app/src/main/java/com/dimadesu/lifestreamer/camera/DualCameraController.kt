@@ -135,6 +135,18 @@ class DualCameraController {
 
     companion object {
         private const val TAG = "DualCameraController"
+
+        fun getCompositionModeName(mode: CompositionMode): String {
+            return when (mode) {
+                CompositionMode.PIP_TOP_RIGHT -> "PiP (Top Right)"
+                CompositionMode.PIP_TOP_LEFT -> "PiP (Top Left)"
+                CompositionMode.PIP_BOTTOM_RIGHT -> "PiP (Bottom Right)"
+                CompositionMode.PIP_BOTTOM_LEFT -> "PiP (Bottom Left)"
+                CompositionMode.SIDE_BY_SIDE -> "Split (Side-by-Side)"
+                CompositionMode.TOP_BOTTOM -> "Split (Top-Bottom)"
+                CompositionMode.SINGLE -> "Single Camera"
+            }
+        }
     }
 }
 

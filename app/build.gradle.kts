@@ -20,7 +20,7 @@ android {
         compileSdk = 37
 
         versionCode = 45
-        versionName = "2.16.2a"
+        versionName = "2.16.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -82,6 +82,7 @@ dependencies {
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
+    implementation(libs.androidx.compose.material.icons.core)
     implementation(libs.androidx.compose.runtime.livedata)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)
@@ -133,7 +134,7 @@ afterEvaluate {
                 injectedDir?.let { file("$it/release/app-release.apk") },
                 injectedDir?.let { file("$it/app-release.apk") },
                 file("${projectDir}/release/app-release.apk"),
-                file("${layout.buildDirectory.get()}/outputs/apk/release/app-release.apk")
+                file("${layout.buildDirectory.get()}/outputs/apk/release/app-release.apk"),
             ).distinct().forEach { originalApk ->
                 if (originalApk.exists()) {
                     val newFile = File(originalApk.parent, newName)
@@ -150,7 +151,7 @@ afterEvaluate {
                 injectedDir?.let { file("$it/release/app-release.aab") },
                 injectedDir?.let { file("$it/app-release.aab") },
                 file("${projectDir}/release/app-release.aab"),
-                file("${layout.buildDirectory.get()}/outputs/bundle/release/app-release.aab")
+                file("${layout.buildDirectory.get()}/outputs/bundle/release/app-release.aab"),
             ).distinct().forEach { originalBundle ->
                 if (originalBundle.exists()) {
                     val newFile = File(originalBundle.parent, newName)

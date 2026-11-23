@@ -6,6 +6,19 @@ For original (stable) LifeStreamer (version 1) go here https://github.com/dimade
 
 LifeStreamerV2 (major version 2.x.x) repo is a place to take risks and try crazy experiments without affecting V1.
 
+## LifeStreamerV2 new features on top of V1
+
+- Reimagined UI:
+  - Main screen buttons grouped into categories.
+  - Separate settings screen removed.
+  - All settings are available on the main screen.
+- Dual camera support for Android cameras with picture-in-picture (PIP) and split view layouts.
+- Extra options for Android camera video source:
+  - Stabilisation: OIS/EIS/OFF.
+  - Noise reduction.
+- Switching from Android camera to Android camera improvements: reduce stuttering and frame freezes during transition, render black frames.
+- Android camera video source: no more video/audio stuttering or interruptions on published stream when app goes to/from background.
+
 ## The vision for V1
 
 Original LifeStreamer (V1) is supposed to be as small as possible, to be very stable and reliable.
@@ -17,11 +30,6 @@ LS V1:
 - Input switcher
 - Video/audio monitor
 - Outputs: RTMP/SRT/SRTLA with adaptive bitrate.
-- Extra options for Android camera video source:
-  - Stabilisation: OIS/EIS/OFF.
-  - Noise reduction.
-- Switching improvements:
-  - Android camera to Android camera - reduce stuttering and frame freezes during transition, render black frames.
 
 A lot of people already use it and, in a way, it's perfect and complete as it is. It is sort of in a maintenance mode. I don't want to add any major changes to it for now.
 
@@ -71,6 +79,6 @@ Maybe this can become a completely new app.
 
 Maybe some ideas from here can be added to V1.
 
-Maybe some day this will replace V1.
+Maybe someday this will replace V1.
 
 Not sure yet.

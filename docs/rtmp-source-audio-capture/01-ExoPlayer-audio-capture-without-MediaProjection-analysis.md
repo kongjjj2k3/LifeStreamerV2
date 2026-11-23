@@ -4,8 +4,8 @@ When you use [MediaProjectionAudioSource.kt](file:///Users/dmytroantonov/git/Lif
 
 1. **Real-Time Wall-Clock Pacing & Continuous Silence:**
    - StreamPack's [CameraStreamerService.kt](file:///Users/dmytroantonov/git/LifeStreamerV2/app/src/main/java/com/dimadesu/lifestreamer/services/CameraStreamerService.kt#L66-L68) runs `SingleStreamer` in `AudioInputMode.PUSH`, which uses [RawFramePullPush.kt](file:///Users/dmytroantonov/git/LifeStreamerV2/StreamPack/core/src/main/java/io/github/thibaultbee/streampack/core/elements/processing/RawFramePullPush.kt#L71-L103).
-   - `RawFramePullPush` runs a tight `while (isActive)` loop with **no sleep**, holding `mutex.withLock` while calling `source.fillAudioFrame(buffer)`. It expects `fillAudioFrame()` to **block** for the exact duration of one audio frame (~20 ms):
-     - **If `fillAudioFrame()` doesn't block** when buffered data is available: ExoPlayer's `DefaultAudioSink` initially decodes a **burst of ~250–500 ms of audio** in a few milliseconds to fill the empty `AudioTrack` buffer. If `fillAudioFrame()` drains that burst immediately without pacing, it floods [MediaCodecEncoder.kt](file:///Users/dmytroantonov/git/LifeStreamerV2/StreamPack/core/src/main/java/io/github/thibaultbee/streampack/core/elements/encoders/mediacodec/MediaCodecEncoder.kt#L593-L638) (`SyncByteBufferInput`), which uses non-blocking `dequeueInputBuffer(0)` and drops excess bytes (`"Failed to queue input frame: skipping ... bytes"`).
+   - `RawFramePullPush` runs a tight `while (isActive)` loop with **no sleep**, holding `mutex.withLock` while calling `source.fillAudioFrame(buffer)`. It expects `fillAudioFrame()` to **block** for the exact duration of one audio frame (~20–40 ms):
+     - **If `fillAudioFrame()` doesn't block** when buffered data is available: ExoPlayer's `DefaultAudioSink` initially decodes a **burst of ~250–750 ms of audio** in a few milliseconds to fill the empty `AudioTrack` buffer. If `fillAudioFrame()` drains that burst immediately without pacing, it floods [MediaCodecEncoder.kt](file:///Users/dmytroantonov/git/LifeStreamerV2/StreamPack/core/src/main/java/io/github/thibaultbee/streampack/core/elements/encoders/mediacodec/MediaCodecEncoder.kt#L593-L638) (`SyncByteBufferInput`), which uses non-blocking `dequeueInputBuffer(0)` and drops excess bytes (`"Failed to queue input frame: skipping ... bytes"`).
      - **If `fillAudioFrame()` blocks waiting for ExoPlayer** when RTMP is buffering/reconnecting: it holds `RawFramePullPush.mutex`, which **deadlocks** `setInput()` / `removeInput()` when switching sources or stopping the stream, and starves the audio encoder.
      - **If `fillAudioFrame()` throws or returns early** when no data is ready: `RawFramePullPush` spins at 100% CPU in `while (isActive)`.
    - `AudioRecord` + `AudioPlaybackCapture` naturally blocks at the hardware sample rate and outputs clean `0`s (silence) whenever ExoPlayer is paused, buffering, or disconnected.
@@ -24,7 +24,7 @@ When you use [MediaProjectionAudioSource.kt](file:///Users/dmytroantonov/git/Lif
 
 ### 2. Do You Have to Transcode Audio When the User Changes Settings?
 
-**No codec transcoding (AAC -> AAC/Opus) is needed.**
+**No codec transcoding (AAC → AAC/Opus) is needed.**
 
 Look at how audio flows in your app:
 1. **ExoPlayer** already decodes the incoming RTMP/SRT audio stream (AAC/MP3/Opus) into **uncompressed 16-bit PCM**.
@@ -37,9 +37,9 @@ The **only** adaptation needed between ExoPlayer's decoded PCM and StreamPack's 
 - **PCM Encoding Normalization:** ensuring `ENCODING_PCM_16BIT`.
 
 **Best part:** `androidx.media3:media3-common:1.8.0` (already in [app/build.gradle.kts](file:///Users/dmytroantonov/git/LifeStreamerV2/app/build.gradle.kts#L113)) ships with built-in, battle-tested `AudioProcessor` classes for all three:
-- `androidx.media3.common.audio.ToInt16PcmAudioProcessor` -> converts any 8/24/32-bit or float PCM to 16-bit PCM.
-- `androidx.media3.common.audio.ChannelMixingAudioProcessor` + `ChannelMixingMatrix.create(inputChannels, outputChannels)` -> handles Mono <-> Stereo (and multi-channel) mixing.
-- `androidx.media3.common.audio.SonicAudioProcessor` -> Media3's built-in C/Java Sonic resampler (`setOutputSampleRateHz(targetSampleRate)`).
+- `androidx.media3.common.audio.ToInt16PcmAudioProcessor` — converts any 8/24/32-bit or float PCM to 16-bit PCM.
+- `androidx.media3.common.audio.ChannelMixingAudioProcessor` + `ChannelMixingMatrix.create(inputChannels, outputChannels)` — handles Mono ↔ Stereo (and multi-channel) mixing.
+- `androidx.media3.common.audio.SonicAudioProcessor` — Media3's built-in C/Java Sonic resampler (`setOutputSampleRateHz(targetSampleRate)`).
 
 ---
 
@@ -78,7 +78,7 @@ flowchart LR
 2. **Convert PCM to `AudioSourceConfig` using Media3's `AudioProcessingPipeline`:**
    - When `ExoPlayerAudioSource.configure(config: AudioSourceConfig)` is called by StreamPack, it sets the target `sampleRate` (e.g., 48000) and `channelCount` (1 or 2) on the bridge.
    - Whenever `tapProcessor` receives input buffers (`inputFormat.sampleRate`, `inputFormat.channelCount`, `inputFormat.encoding`), if they match the target `AudioSourceConfig`, it copies the bytes straight into the ring buffer (zero conversion overhead).
-   - If sample rate, channels, or bit depth differ, it runs them through `ToInt16PcmAudioProcessor` -> `ChannelMixingAudioProcessor` -> `SonicAudioProcessor` and writes the converted output into the ring buffer.
+   - If sample rate, channels, or bit depth differ, it runs them through `ToInt16PcmAudioProcessor` → `ChannelMixingAudioProcessor` → `SonicAudioProcessor` and writes the converted output into the ring buffer.
 
 3. **Wall-Clock Pacing + Silence Fallback in `ExoPlayerAudioSource.fillAudioFrame()`:**
    - This is the piece that makes StreamPack happy:
@@ -112,3 +112,5 @@ If you go with **Approach 1**:
 - Switching to an RTMP/SRT source in [PreviewViewModel.kt](file:///Users/dmytroantonov/git/LifeStreamerV2/app/src/main/java/com/dimadesu/lifestreamer/ui/main/PreviewViewModel.kt#L3472-L3550) will **no longer prompt the user for screen capture permission** (`MediaProjection` will only be needed if the user explicitly turns on "SYS AUDIO" to capture other phone apps).
 - All the race conditions around `AudioPlaybackCapture` UID routing after ExoPlayer restarts ([research-rtmp-src-audio-is-sometimes-missing-after-rtmp-src-restart.md](file:///Users/dmytroantonov/git/LifeStreamerV2/docs/research-rtmp-src-audio-is-sometimes-missing-after-rtmp-src-restart.md)) disappear completely.
 - Any combination of RTMP input audio (44.1 kHz, 48 kHz, Mono, Stereo) and app audio settings (AAC/Opus, Mono/Stereo, any sample rate/bitrate) will work reliably across all Android devices.
+
+Would you like to prototype **Approach 1** (`RtmpAudioBridge` + `ExoPlayerAudioSource`)?

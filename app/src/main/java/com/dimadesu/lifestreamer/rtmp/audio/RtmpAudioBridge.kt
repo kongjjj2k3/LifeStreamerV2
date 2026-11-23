@@ -190,9 +190,9 @@ open class RtmpAudioBridgeCore {
     fun trimToTargetBuffer() {
         synchronized(lock) {
             val frameSize = targetBytesPerFrame.coerceAtLeast(2)
-            val excessBytes = availableBytes - targetFillBytes
-            if (excessBytes > 0) {
-                val dropBytes = (excessBytes / frameSize) * frameSize
+            val excess = availableBytes - targetFillBytes
+            if (excess > 0) {
+                val dropBytes = ((excess / frameSize) * frameSize).coerceAtMost(availableBytes)
                 val capacity = ringBuffer.size
                 if (capacity > 0 && dropBytes > 0) {
                     readPos = (readPos + dropBytes) % capacity
@@ -202,10 +202,12 @@ open class RtmpAudioBridgeCore {
         }
     }
 
+    /**
+     * Returns the duration of audio currently queued in the ring buffer, in milliseconds.
+     */
     fun availableDurationMs(): Int {
         synchronized(lock) {
-            val frameSize = targetBytesPerFrame.coerceAtLeast(2)
-            val bytesPerSec = (targetSampleRate.toLong() * frameSize).coerceAtLeast(1L)
+            val bytesPerSec = (targetSampleRate.toLong() * targetBytesPerFrame).coerceAtLeast(1L)
             return ((availableBytes.toLong() * 1000L) / bytesPerSec).toInt()
         }
     }
@@ -617,7 +619,7 @@ open class RtmpAudioBridgeCore {
         private var isSuperseded = false
         private var isDiscarded = false
         private var stagedFormat: Media3AudioFormat? = null
-        private val stagedBuffers = ArrayDeque<ByteBuffer>()
+        private val stagedBuffers = kotlin.collections.ArrayDeque<ByteBuffer>()
         private var stagedBytes = 0
 
         fun markSuperseded() {

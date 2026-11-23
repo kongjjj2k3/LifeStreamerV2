@@ -1,5 +1,7 @@
 package com.dimadesu.lifestreamer.ui.main.compose
 
+import com.dimadesu.lifestreamer.camera.DualCameraController
+
 import android.content.res.Configuration
 import android.hardware.camera2.CaptureResult
 import android.util.Range
@@ -350,8 +352,8 @@ fun CameraControlsBottomDrawer(
                         CameraDropdownRow(
                             title = "Layout Mode",
                             iconRes = R.drawable.ic_baseline_linked_camera_24,
-                            currentValueName = PreviewViewModel.getCompositionModeName(currentCompositionMode),
-                            options = compositionModes.map { it to PreviewViewModel.getCompositionModeName(it) },
+                            currentValueName = DualCameraController.getCompositionModeName(currentCompositionMode),
+                            options = compositionModes.map { it to DualCameraController.getCompositionModeName(it) },
                             currentValue = currentCompositionMode,
                             onSelectOption = onSelectCompositionMode
                         )

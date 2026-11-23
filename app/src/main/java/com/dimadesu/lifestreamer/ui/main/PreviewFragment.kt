@@ -62,7 +62,6 @@ import com.dimadesu.lifestreamer.ui.help.RtmpHelpActivity
 import com.dimadesu.lifestreamer.ui.help.SrtHelpActivity
 import com.dimadesu.lifestreamer.ui.help.UvcHelpActivity
 import android.content.ActivityNotFoundException
-import android.view.Surface
 import com.dimadesu.lifestreamer.utils.DialogUtils
 import com.dimadesu.lifestreamer.utils.PermissionManager
 import io.github.thibaultbee.streampack.core.interfaces.IStreamer
@@ -471,7 +470,7 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
         val rotation = if (fixedRotation != null) {
             fixedRotation
         } else if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
-            requireActivity().display?.rotation ?: Surface.ROTATION_0
+            requireActivity().display?.rotation ?: android.view.Surface.ROTATION_0
         } else {
             @Suppress("DEPRECATION")
             requireActivity().windowManager.defaultDisplay.rotation
@@ -610,10 +609,9 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
         // Use the Service's saved orientation as the source of truth, since Fragment member
         // variables can be reset during lifecycle transitions.
         val status = previewViewModel.streamStatus.value
-        val isInStreamingProcess =
-            status == StreamStatus.STARTING ||
-            status == StreamStatus.CONNECTING ||
-            status == StreamStatus.STREAMING
+        val isInStreamingProcess = status == com.dimadesu.lifestreamer.models.StreamStatus.STARTING ||
+            status == com.dimadesu.lifestreamer.models.StreamStatus.CONNECTING ||
+            status == com.dimadesu.lifestreamer.models.StreamStatus.STREAMING
         
         if (isInStreamingProcess) {
             // Get saved orientation from Service (source of truth)

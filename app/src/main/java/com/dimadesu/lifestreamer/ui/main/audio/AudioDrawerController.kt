@@ -204,18 +204,18 @@ class AudioDrawerController(
                 // When BT, MP, or RTMP is active, the preference is saved and will apply next time
                 // ConditionalAudioSourceFactory is used (e.g. after SYS AUDIO is toggled off).
                 val btActive = host.isBluetoothMicActive
-                val sysActive = host.isSystemAudioActive
+                val sysAudioActive = host.isSystemAudioActive
                 // Also check the live audio source: _activeRtmpIndex is posted asynchronously and the
                 // RTMP bitmap fallback keeps ExoPlayerAudioSource, so the flag alone can lag behind.
                 val liveAudioSource = currentStreamer.audioInput.sourceFlow.value
                 val rtmpActive = host.isRtmpSourceActive ||
                     liveAudioSource is IMediaProjectionSource ||
                     liveAudioSource is ExoPlayerAudioSource
-                if (btActive || sysActive || rtmpActive) {
+                if (btActive || sysAudioActive || rtmpActive) {
                     Log.i(
                         TAG,
                         "Audio source preference saved but not applied — " +
-                            "BT=$btActive, SYS=$sysActive, RTMP=$rtmpActive override is active"
+                            "BT=$btActive, SYS=$sysAudioActive, RTMP=$rtmpActive override is active"
                     )
                 } else {
                     currentStreamer.setAudioSource(ConditionalAudioSourceFactory())
@@ -223,7 +223,7 @@ class AudioDrawerController(
                 }
 
                 // If audio monitoring is enabled and we actually switched the source, restart passthrough
-                if (!btActive && !sysActive && !rtmpActive && host.isMonitorAudioOn) {
+                if (!btActive && !sysAudioActive && !rtmpActive && host.isMonitorAudioOn) {
                     Log.i(TAG, "Restarting audio passthrough with new settings")
                     host.service?.stopAudioPassthrough()
                     delay(100) // Small delay to ensure clean restart
